@@ -14,8 +14,8 @@
         <engine name="cordova-android" version=">=6.3.0"/>
         <engine name="cordova-ios" version=">=4.3.0"/>
     </engines>
-    <repo>https://github.com/dpa99c/cordova-diagnostic-plugin.git</repo>
-    <issue>https://github.com/dpa99c/cordova-diagnostic-plugin/issues</issue>
+    <repo>https://github.com/MPSoftDenmark/cordova-diagnostic-plugin.git</repo>
+    <issue>https://github.com/MPSoftDenmark/cordova-diagnostic-plugin/issues</issue>
 
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
