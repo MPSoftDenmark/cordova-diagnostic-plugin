@@ -21,6 +21,8 @@ package cordova.plugins;
 /*
  * Imports
  */
+import static android.content.Context.BATTERY_SERVICE;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -45,6 +47,7 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.util.Log;
 
@@ -54,7 +57,7 @@ import android.content.pm.PackageManager;
 import android.provider.Settings;
 
 
-import android.support.v4.app.ActivityCompat;
+import androidx.core.app.ActivityCompat;
 
 /**
  * Diagnostic plugin implementation for Android
@@ -87,6 +90,8 @@ public class Diagnostic extends CordovaPlugin{
         Diagnostic.addBiDirMapEntry(_permissionsMap, "GET_ACCOUNTS", Manifest.permission.GET_ACCOUNTS);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "ACCESS_FINE_LOCATION", Manifest.permission.ACCESS_FINE_LOCATION);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "ACCESS_COARSE_LOCATION", Manifest.permission.ACCESS_COARSE_LOCATION);
+        // Add as string as Manifest.permission.ACCESS_BACKGROUND_LOCATION not defined in < API 29:
+        Diagnostic.addBiDirMapEntry(_permissionsMap, "ACCESS_BACKGROUND_LOCATION", "android.permission.ACCESS_BACKGROUND_LOCATION");
         Diagnostic.addBiDirMapEntry(_permissionsMap, "RECORD_AUDIO", Manifest.permission.RECORD_AUDIO);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "READ_PHONE_STATE", Manifest.permission.READ_PHONE_STATE);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "CALL_PHONE", Manifest.permission.CALL_PHONE);
@@ -103,6 +108,8 @@ public class Diagnostic extends CordovaPlugin{
         Diagnostic.addBiDirMapEntry(_permissionsMap, "WRITE_CALL_LOG", Manifest.permission.WRITE_CALL_LOG);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "READ_EXTERNAL_STORAGE", Manifest.permission.READ_EXTERNAL_STORAGE);
         Diagnostic.addBiDirMapEntry(_permissionsMap, "BODY_SENSORS", Manifest.permission.BODY_SENSORS);
+        // Add as string as Manifest.permission.ACTIVITY_RECOGNITION not defined in < API 29:
+        Diagnostic.addBiDirMapEntry(_permissionsMap, "ACTIVITY_RECOGNITION", "android.permission.ACTIVITY_RECOGNITION");
         permissionsMap = Collections.unmodifiableMap(_permissionsMap);
     }
 
@@ -246,6 +253,8 @@ public class Diagnostic extends CordovaPlugin{
                 this.restart(args);
             } else if(action.equals("getArchitecture")) {
                 callbackContext.success(getCPUArchitecture());
+            } else if(action.equals("getCurrentBatteryLevel")) {
+                callbackContext.success(getCurrentBatteryLevel());
             } else {
                 handleError("Invalid action");
                 return false;
@@ -489,6 +498,14 @@ public class Diagnostic extends CordovaPlugin{
             if(!permissionsMap.containsKey(permission)){
                 throw new Exception("Permission name '"+permission+"' is not a valid permission");
             }
+            if(Build.VERSION.SDK_INT < 29 && permission.equals("ACCESS_BACKGROUND_LOCATION")){
+                // This version of Android doesn't support background location permission so check for standard coarse location permission
+                permission = "ACCESS_COARSE_LOCATION";
+            }
+            if(Build.VERSION.SDK_INT < 29 && permission.equals("ACTIVITY_RECOGNITION")){
+                // This version of Android doesn't support activity recognition permission so check for body sensors permission
+                permission = "BODY_SENSORS";
+            }
             String androidPermission = permissionsMap.get(permission);
             Log.v(TAG, "Get authorisation status for "+androidPermission);
             boolean granted = hasPermission(androidPermission);
@@ -546,8 +563,12 @@ public class Diagnostic extends CordovaPlugin{
     }
 
     protected int storeContextByRequestId(){
+        return storeContextByRequestId(currentContext);
+    }
+
+    protected int storeContextByRequestId(CallbackContext callbackContext){
         String requestId = generateRandomRequestId();
-        callbackContexts.put(requestId, currentContext);
+        callbackContexts.put(requestId, callbackContext);
         permissionStatuses.put(requestId, new JSONObject());
         return Integer.valueOf(requestId);
     }
@@ -640,7 +661,7 @@ public class Diagnostic extends CordovaPlugin{
             Boolean bool = (Boolean) method.invoke(null, activity, permission);
             shouldShow = bool.booleanValue();
         } catch (NoSuchMethodException e) {
-            throw new Exception("shouldShowRequestPermissionRationale() method not found in ActivityCompat class. Check you have Android Support Library v23+ installed");
+            throw new Exception("shouldShowRequestPermissionRationale() method not found in ActivityCompat class.");
         }
         return shouldShow;
     }
@@ -765,6 +786,13 @@ public class Diagnostic extends CordovaPlugin{
         return sharedPref.getBoolean(permission, false);
     }
 
+    protected int getCurrentBatteryLevel(){
+        BatteryManager bm = (BatteryManager) cordova.getContext().getApplicationContext().getSystemService(BATTERY_SERVICE);
+        return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+    }
+
+
+
     /************
      * Overrides
      ***********/
@@ -789,6 +817,14 @@ public class Diagnostic extends CordovaPlugin{
             for (int i = 0, len = permissions.length; i < len; i++) {
                 String androidPermission = permissions[i];
                 String permission = permissionsMap.get(androidPermission);
+                if(Build.VERSION.SDK_INT < 29 && permission.equals("ACCESS_BACKGROUND_LOCATION")){
+                    // This version of Android doesn't support background location permission so use standard coarse location permission
+                    permission = "ACCESS_COARSE_LOCATION";
+                }
+                if(Build.VERSION.SDK_INT < 29 && permission.equals("ACTIVITY_RECOGNITION")){
+                    // This version of Android doesn't support activity recognition permission so check for body sensors permission
+                    permission = "BODY_SENSORS";
+                }
                 String status;
                 if (grantResults[i] == PackageManager.PERMISSION_DENIED) {
                     boolean showRationale = shouldShowRequestPermissionRationale(this.cordova.getActivity(), androidPermission);

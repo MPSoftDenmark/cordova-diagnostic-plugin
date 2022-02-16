@@ -16,6 +16,8 @@ NSString*const UNKNOWN = @"unknown";
 NSString*const AUTHORIZATION_NOT_DETERMINED = @"not_determined";
 NSString*const AUTHORIZATION_DENIED = @"denied_always";
 NSString*const AUTHORIZATION_GRANTED = @"authorized";
+NSString*const AUTHORIZATION_PROVISIONAL = @"provisional";
+NSString*const AUTHORIZATION_EPHEMERAL = @"ephemeral";
 
 // Internal constants
 static NSString*const LOG_TAG = @"Diagnostic[native]";
@@ -49,24 +51,13 @@ static Diagnostic* diagnostic = nil;
 - (void) switchToSettings: (CDVInvokedUrlCommand*)command
 {
     @try {
-        if (UIApplicationOpenSettingsURLString != nil ){
-            if ([[UIApplication sharedApplication] respondsToSelector:@selector(openURL:options:completionHandler:)]) {
-#if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
-                [[UIApplication sharedApplication] openURL:[NSURL URLWithString: UIApplicationOpenSettingsURLString] options:@{} completionHandler:^(BOOL success) {
-                    if (success) {
-                        [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK] :command];
-                    }else{
-                        [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR] :command];
-                    }
-                }];
-#endif
-            }else{
-                [[UIApplication sharedApplication] openURL: [NSURL URLWithString: UIApplicationOpenSettingsURLString]];
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString: UIApplicationOpenSettingsURLString] options:@{} completionHandler:^(BOOL success) {
+            if (success) {
                 [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK] :command];
+            }else{
+                [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR] :command];
             }
-        }else{
-            [self sendPluginError:@"Not supported below iOS 8":command];
-        }
+        }];
     }
     @catch (NSException *exception) {
         [self handlePluginException:exception :command];
@@ -82,6 +73,7 @@ static Diagnostic* diagnostic = nil;
         _status = [[UIApplication sharedApplication] backgroundRefreshStatus];
     }@catch (NSException *exception) {
         [self handlePluginException:exception :command];
+        return;
     }
     [self.commandDelegate runInBackground:^{
         @try {
@@ -163,6 +155,21 @@ static Diagnostic* diagnostic = nil;
     }];
 }
 
+- (void) getCurrentBatteryLevel: (CDVInvokedUrlCommand*)command {
+    [self.commandDelegate runInBackground:^{
+        @try {
+            UIDevice* currentDevice = [UIDevice currentDevice];
+            [currentDevice setBatteryMonitoringEnabled:true];
+            int batteryLevel = (int)([currentDevice batteryLevel]*100);
+            [self logDebug:[NSString stringWithFormat:@"Battery level: %d", batteryLevel]];
+            [self sendPluginResultInt:batteryLevel:command];
+            [currentDevice setBatteryMonitoringEnabled:false];
+        }@catch (NSException *exception) {
+            [self handlePluginException:exception :command];
+        }
+    }];
+}
+
 
 /********************************/
 #pragma mark - Send results
@@ -187,6 +194,12 @@ static Diagnostic* diagnostic = nil;
 - (void) sendPluginResultString: (NSString*)result :(CDVInvokedUrlCommand*)command
 {
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:result];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
+- (void) sendPluginResultInt: (int)result :(CDVInvokedUrlCommand*)command
+{
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:result];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
